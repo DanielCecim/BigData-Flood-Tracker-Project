@@ -29,7 +29,7 @@ from src.backfill.open_meteo_archive import fetch_weather_history
 
 RIVER_PROGRESS_LOG   = "logs/backfill_river_progress.log"
 STATION_CATALOGUE_CACHE = "logs/ea_station_catalogue.json"
-OPEN_METEO_SLEEP     = 10  # seconds between Open-Meteo requests to avoid 429s
+OPEN_METEO_SLEEP     = 240  # seconds between Open-Meteo requests to avoid 429s
 
 
 def _load_station_catalogue() -> list[dict]:

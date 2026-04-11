@@ -17,6 +17,7 @@ NULL in the database. The row is not skipped; only the null field is absent.
 from __future__ import annotations
 import json
 import time
+import urllib.error
 import urllib.request
 from datetime import date
 
@@ -27,12 +28,19 @@ BACKOFF  = 3
 
 
 def _get(url: str) -> dict:
-    """HTTP GET with retry. Raises RuntimeError on total failure."""
+    """HTTP GET with retry. On 429, fails immediately (caller sleeps between stations)."""
     for attempt in range(1, RETRIES + 1):
         try:
             req = urllib.request.Request(url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
                 return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                # Do not retry — let the between-station sleep + restart gap clear the limit
+                raise RuntimeError(f"[Open-Meteo Archive] 429 rate limited: {url}")
+            if attempt == RETRIES:
+                raise RuntimeError(f"[Open-Meteo Archive] FAILED: {url} — {e}")
+            time.sleep(BACKOFF)
         except Exception as e:
             if attempt == RETRIES:
                 raise RuntimeError(f"[Open-Meteo Archive] FAILED: {url} — {e}")
