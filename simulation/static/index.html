@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UK Flood Warning Simulation</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ---- Header ---- */
+    #header {
+      height: 48px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 1000;
+    }
+    #header h1 { font-size: 0.95rem; font-weight: 600; color: #58a6ff; }
+    #header .subtitle { font-size: 0.75rem; color: #8b949e; }
+    #status-badge {
+      margin-left: auto;
+      font-size: 0.72rem;
+      padding: 2px 10px;
+      border-radius: 12px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #8b949e;
+    }
+    #status-badge.ready  { border-color: #238636; color: #3fb950; }
+    #status-badge.error  { border-color: #da3633; color: #f85149; }
+
+    /* ---- Body row: map + sidebar ---- */
+    #body-row {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ---- Map ---- */
+    #map { flex: 1; min-width: 0; }
+
+    /* ---- Sidebar ---- */
+    #sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: #161b22;
+      border-left: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.2s ease;
+    }
+    #sidebar.collapsed { width: 0; border-left: none; }
+
+    #sidebar-inner {
+      width: 280px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #sidebar-inner::-webkit-scrollbar { width: 4px; }
+    #sidebar-inner::-webkit-scrollbar-track { background: transparent; }
+    #sidebar-inner::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+    .sb-section { display: flex; flex-direction: column; gap: 8px; }
+
+    .sb-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8b949e;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    /* Overview cards */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .ov-card {
+      background: #21262d;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .ov-label { font-size: 0.68rem; color: #8b949e; text-transform: capitalize; }
+    .ov-count { font-size: 1.05rem; font-weight: 700; }
+    .ov-pct   { font-size: 0.7rem; color: #8b949e; }
+    .ov-bar-track { height: 3px; background: #30363d; border-radius: 2px; margin-top: 4px; }
+    .ov-bar       { height: 3px; border-radius: 2px; }
+
+    .col-normal  { color: #2ecc71; }
+    .col-watch   { color: #f1c40f; }
+    .col-alert   { color: #e67e22; }
+    .col-warning { color: #e74c3c; }
+    .bg-normal   { background: #2ecc71; }
+    .bg-watch    { background: #f1c40f; }
+    .bg-alert    { background: #e67e22; }
+    .bg-warning  { background: #e74c3c; }
+
+    /* Year table */
+    .year-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .year-table th {
+      text-align: right; color: #8b949e; font-weight: 600;
+      padding: 3px 6px; border-bottom: 1px solid #21262d;
+    }
+    .year-table th:first-child { text-align: left; }
+    .year-table td {
+      text-align: right; padding: 4px 6px;
+      border-bottom: 1px solid #21262d;
+    }
+    .year-table td:first-child { text-align: left; font-weight: 600; }
+
+    /* Top stations */
+    .station-list { display: flex; flex-direction: column; gap: 4px; }
+    .station-row {
+      display: flex; align-items: center; gap: 8px;
+      background: #21262d; border-radius: 5px; padding: 5px 8px;
+      font-size: 0.75rem; cursor: pointer; transition: background 0.1s;
+    }
+    .station-row:hover { background: #2d333b; }
+    .station-rank { color: #8b949e; min-width: 18px; font-size: 0.68rem; }
+    .station-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .station-badge {
+      background: rgba(231,76,60,0.18); color: #e74c3c;
+      border-radius: 10px; padding: 1px 7px; font-weight: 700; font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    /* Live section */
+    .live-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    }
+    .live-cell {
+      background: #21262d; border-radius: 5px; padding: 6px 4px;
+      text-align: center;
+    }
+    .live-cell .lc-count { font-size: 0.9rem; font-weight: 700; }
+    .live-cell .lc-label { font-size: 0.62rem; color: #8b949e; margin-top: 1px; }
+
+    /* Sidebar toggle button */
+    #btn-toggle-sidebar {
+      position: absolute;
+      top: 56px;
+      right: 0;
+      z-index: 1001;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-right: none;
+      color: #8b949e;
+      cursor: pointer;
+      padding: 6px 5px;
+      border-radius: 4px 0 0 4px;
+      font-size: 0.8rem;
+      line-height: 1;
+      transition: color 0.15s;
+    }
+    #btn-toggle-sidebar:hover { color: #e6edf3; }
+
+    /* ---- Controls bar ---- */
+    #controls {
+      height: 68px;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      flex-shrink: 0;
+    }
+
+    button#btn-play {
+      background: #238636; color: #fff; border: none;
+      border-radius: 6px; padding: 6px 16px;
+      font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      min-width: 80px; transition: background 0.15s;
+    }
+    button#btn-play:hover { background: #2ea043; }
+    button#btn-play.paused { background: #1f6feb; }
+    button#btn-play.paused:hover { background: #388bfd; }
+
+    #date-display {
+      font-size: 1.05rem; font-weight: 700;
+      font-variant-numeric: tabular-nums; color: #e6edf3;
+      min-width: 110px;
+    }
+
+    #progress-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    #progress-bar-bg {
+      height: 6px; background: #21262d; border-radius: 3px;
+      overflow: hidden; cursor: pointer;
+    }
+    #progress-bar {
+      height: 100%; background: #1f6feb; border-radius: 3px;
+      width: 0%; transition: width 0.3s linear;
+    }
+    #progress-label { font-size: 0.7rem; color: #8b949e; }
+
+    #speed-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 90px; }
+    #speed-wrap label { font-size: 0.7rem; color: #8b949e; }
+    #speed-row { display: flex; align-items: center; gap: 6px; }
+    #speed-slider { width: 70px; accent-color: #1f6feb; cursor: pointer; }
+    #speed-val { font-size: 0.8rem; font-weight: 600; min-width: 32px; text-align: right; }
+
+    #station-count { font-size: 0.72rem; color: #8b949e; white-space: nowrap; }
+
+    /* Legend */
+    #legend {
+      position: absolute; bottom: 80px; left: 12px;
+      z-index: 999;
+      background: rgba(22,27,34,0.93);
+      border: 1px solid #30363d; border-radius: 8px;
+      padding: 10px 14px; font-size: 0.75rem; line-height: 1.9;
+    }
+    #legend strong { display: block; margin-bottom: 2px; font-size: 0.68rem;
+                     text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; }
+    .l-dot { display: inline-block; width: 10px; height: 10px;
+             border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+    /* Leaflet popup */
+    .leaflet-popup-content-wrapper {
+      background: #161b22; color: #e6edf3;
+      border: 1px solid #30363d; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-tip { background: #161b22; }
+    .popup-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+    .popup-ref   { font-size: 0.7rem; color: #8b949e; margin-bottom: 4px; }
+    .popup-row   { display: flex; justify-content: space-between; gap: 16px;
+                   font-size: 0.78rem; margin-top: 3px; }
+    .popup-lbl   { color: #8b949e; }
+    .popup-val   { font-weight: 600; }
+    .popup-alert { display: inline-block; margin-top: 6px; padding: 2px 9px;
+                   border-radius: 10px; font-size: 0.73rem; font-weight: 600; }
+    .alert-normal  { background:rgba(46,204,113,.18); color:#2ecc71; }
+    .alert-watch   { background:rgba(241,196,15,.18);  color:#f1c40f; }
+    .alert-alert   { background:rgba(230,126,34,.18);  color:#e67e22; }
+    .alert-warning { background:rgba(231,76,60,.18);   color:#e74c3c; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div id="header">
+    <h1>UK Flood Warning Simulation</h1>
+    <span class="subtitle">2021–2024 historical replay · LightGBM P90 model</span>
+    <span id="status-badge">Loading…</span>
+  </div>
+
+  <!-- Body: map + sidebar -->
+  <div id="body-row">
+    <div id="map"></div>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-inner">
+
+        <!-- Live counts (updated per frame) -->
+        <div class="sb-section">
+          <div class="sb-title">Live — today's alerts</div>
+          <div class="live-grid">
+            <div class="live-cell">
+              <div class="lc-count col-warning" id="live-warning">–</div>
+              <div class="lc-label">Warning</div>
+            </div>
+            <div class="live-cell">
+              <div class="lc-count col-alert" id="live-alert">–</div>
+              <div class="lc-label">Alert</div>
+            </div>
+            <div class="live-cell">
+              <div class="lc-count col-watch" id="live-watch">–</div>
+              <div class="lc-label">Watch</div>
+            </div>
+            <div class="live-cell">
+              <div class="lc-count col-normal" id="live-normal">–</div>
+              <div class="lc-label">Normal</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historical overview -->
+        <div class="sb-section" id="section-overview">
+          <div class="sb-title">2021–2024 overview (station-days)</div>
+          <div class="overview-grid" id="overview-grid">
+            <div class="ov-card" style="grid-column:1/-1;color:#8b949e;font-size:0.75rem">Loading statistics…</div>
+          </div>
+        </div>
+
+        <!-- By year -->
+        <div class="sb-section" id="section-year">
+          <div class="sb-title">Elevated alerts by year</div>
+          <table class="year-table">
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th class="col-watch">Watch</th>
+                <th class="col-alert">Alert</th>
+                <th class="col-warning">Warning</th>
+              </tr>
+            </thead>
+            <tbody id="year-tbody">
+              <tr><td colspan="4" style="color:#8b949e;font-size:0.75rem">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Top stations -->
+        <div class="sb-section">
+          <div class="sb-title">Most warned stations</div>
+          <div class="station-list" id="top-stations-list">
+            <div style="color:#8b949e;font-size:0.75rem">Loading…</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar toggle -->
+  <button id="btn-toggle-sidebar" title="Toggle statistics panel">◀</button>
+
+  <!-- Legend -->
+  <div id="legend">
+    <strong>Alert Level</strong>
+    <div><span class="l-dot" style="background:#2ecc71"></span>Normal  &lt;50%</div>
+    <div><span class="l-dot" style="background:#f1c40f"></span>Watch   50–70%</div>
+    <div><span class="l-dot" style="background:#e67e22"></span>Alert   70–90%</div>
+    <div><span class="l-dot" style="background:#e74c3c"></span>Warning &gt;90%</div>
+    <div><span class="l-dot" style="background:#555;opacity:0.5"></span><span style="color:#8b949e">No data</span></div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button id="btn-play">▶ Play</button>
+    <span id="date-display">––––––––––</span>
+    <div id="progress-wrap">
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+      <div id="progress-label">Day 0 of 0</div>
+    </div>
+    <div id="speed-wrap">
+      <label>Speed</label>
+      <div id="speed-row">
+        <input id="speed-slider" type="range" min="0.25" max="20" step="0.25" value="5">
+        <span id="speed-val">5×</span>
+      </div>
+    </div>
+    <span id="station-count">0 stations</span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

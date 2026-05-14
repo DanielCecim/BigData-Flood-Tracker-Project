@@ -1,6 +1,14 @@
-"""Helper: apply a SQL file to the database via psycopg2."""
+"""Helper: apply a SQL file to the database via psycopg2.
+
+Usage (from project root):
+    python scripts/run_sql.py sql/006_flood_events.sql
+"""
 from __future__ import annotations
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from src.db import get_connection
 
 

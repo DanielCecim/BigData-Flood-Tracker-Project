@@ -1,0 +1,19 @@
+# data pipeline (existing)
+psycopg2-binary
+python-dotenv
+
+# ML pipeline
+lightgbm>=4.3
+torch>=2.1
+scikit-learn>=1.4
+pandas>=2.1
+numpy>=1.24
+matplotlib>=3.7
+
+# Modal cloud runner
+modal>=0.64
+
+# Simulation server
+fastapi>=0.115
+uvicorn[standard]>=0.24
+pyarrow>=17.0

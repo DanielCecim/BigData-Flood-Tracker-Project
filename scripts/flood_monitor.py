@@ -1,10 +1,20 @@
-"""UK Flood Prediction Pipeline — CLI entry point."""
+"""UK Flood Prediction Pipeline — CLI entry point.
+
+Usage (from project root):
+    python scripts/flood_monitor.py --once
+    python scripts/flood_monitor.py --backfill-rivers
+    python scripts/flood_monitor.py --backfill-weather
+"""
 from __future__ import annotations
 import argparse
 import json
+import sys
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.db import get_connection
 from src.live.ingest import (
